@@ -158,7 +158,7 @@ class ChildrenController < ApplicationController
     if (params[:query])
       @search = Search.new(params[:query]) 
       if @search.valid?    
-        @results = Child.search(@search)
+        @results = filter_by_permission_level(Child.search(@search), current_user)
         @highlighted_fields = FormSection.sorted_highlighted_fields
       else
         render :search
@@ -197,11 +197,17 @@ class ChildrenController < ApplicationController
 
 
   private
+  def filter_by_permission_level results, user
+    return results if user.permission_level == PermissionLevel::UNLIMITED
+    results.select do |r|
+      r.created_by == user.user_name
+    end
+  end
 
-	def file_basename(child = nil)
-		prefix = child.nil? ? current_user_name : child.unique_identifier
+  def file_basename(child = nil)
+    prefix = child.nil? ? current_user_name : child.unique_identifier
     user = User.find_by_user_name(current_user_name)
-		"#{prefix}-#{Clock.now.in_time_zone(user.time_zone).strftime('%Y%m%d-%H%M')}"
+    "#{prefix}-#{Clock.now.in_time_zone(user.time_zone).strftime('%Y%m%d-%H%M')}"
   end
 
   def file_name_datetime_string

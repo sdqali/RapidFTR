@@ -2,23 +2,25 @@ require 'spec_helper'
 
 
 def inject_export_generator( fake_export_generator, child_data )
-	ExportGenerator.stub!(:new).with(child_data).and_return( fake_export_generator )
+  ExportGenerator.stub!(:new).with(child_data).and_return( fake_export_generator )
 end
 
 def stub_out_export_generator child_data = []
-	inject_export_generator( stub_export_generator = stub(ExportGenerator) , child_data)
-	stub_export_generator.stub!(:child_photos).and_return('')
-	stub_export_generator
+  inject_export_generator( stub_export_generator = stub(ExportGenerator) , child_data)
+  stub_export_generator.stub!(:child_photos).and_return('')
+  stub_export_generator
 end
 
 def stub_out_child_get(mock_child = mock(Child))
-	Child.stub(:get).and_return( mock_child )
-	mock_child
+  Child.stub(:get).and_return( mock_child )
+  mock_child
 end
 
 def stub_out_user
   user = mock(:user)
   user.stub!(:time_zone).and_return TZInfo::Timezone.get("UTC")
+  user.stub!(:permission_level).and_return("")
+  user.stub!(:user_name).and_return("")
   User.stub!(:find_by_user_name).and_return user
 end
 
@@ -125,9 +127,9 @@ describe ChildrenController do
       current_time = Time.parse("Jan 17 2010 14:05:32")
       Time.stub!(:now).and_return current_time
       put :update, :id => child.id,
-        :child => {
-          :last_known_location => "Manchester",
-          :photo => uploadable_photo_jeff }
+      :child => {
+        :last_known_location => "Manchester",
+        :photo => uploadable_photo_jeff }
 
       assigns[:child]['last_known_location'].should == "Manchester"
       assigns[:child]['_attachments'].size.should == 2
@@ -139,9 +141,9 @@ describe ChildrenController do
       child = Child.create('last_known_location' => "London", 'photo' => uploadable_photo)
 
       put :update, :id => child.id,
-        :child => {
-          :last_known_location => "Manchester",
-          :age => '7'}
+      :child => {
+        :last_known_location => "Manchester",
+        :age => '7'}
 
       assigns[:child]['last_known_location'].should == "Manchester"
       assigns[:child]['age'].should == "7"
@@ -159,22 +161,22 @@ describe ChildrenController do
     it "should allow a records ID to be specified to create a new record with a known id" do
       new_uuid = UUIDTools::UUID.random_create()
       put :update, :id => new_uuid.to_s,
-        :child => {
-            :id => new_uuid.to_s,
-            :_id => new_uuid.to_s,
-            :last_known_location => "London",
-            :age => "7"
-        }
+      :child => {
+        :id => new_uuid.to_s,
+        :_id => new_uuid.to_s,
+        :last_known_location => "London",
+        :age => "7"
+      }
       Child.get(new_uuid.to_s)[:unique_identifier].should_not be_nil
     end
 
     it "should update flag (cast as boolean) and flag message" do
       child = Child.create('last_known_location' => "London", 'photo' => uploadable_photo)
       put :update, :id => child.id,
-        :child => {
-          :flag => true,
-          :flag_message => "Possible Duplicate"
-        }
+      :child => {
+        :flag => true,
+        :flag_message => "Possible Duplicate"
+      }
       assigns[:child]['flag'].should be_true
       assigns[:child]['flag_message'].should == "Possible Duplicate"
     end
@@ -192,13 +194,14 @@ describe ChildrenController do
       history['changes'].should have_key('flag')
       history['datetime'].should == "2010-01-20 17:10:32UTC"
     end
-
   end
 
   describe "GET search" do
-
     it "assigns the highlighted fields as @highlighted_fields on success" do
-      fields = [ mock_model(Field, { :name => "field_1", :display_name => "field display 1" }).as_null_object, 
+      stub_out_user
+
+      fields = [ mock_model(Field, { :name => "field_1", :display_name => "field display 1
+" }).as_null_object,
                  mock_model(Field, { :name => "field_2", :display_name => "field display 2" }).as_null_object ]
       FormSection.stub!(:sorted_highlighted_fields).and_return(fields)     
       search = mock("search", :query => 'the child name', :valid? => true)
@@ -224,10 +227,18 @@ describe ChildrenController do
     end
 
     it "performs a search using the parameters passed to it" do
+      user = mock(:user)
+      user.stub!(:permission_level).and_return(PermissionLevel::UNLIMITED)
+      user.stub!(:user_name).and_return("user")
+      User.stub!(:find_by_user_name).and_return user
+
       search = mock("search", :query => 'the child name', :valid? => true)
       Search.stub!(:new).and_return(search)
 
-      fake_results = [:fake_child,:fake_child]
+      child = mock(:child)
+      child.stub!(:created_by).and_return("user")
+
+      fake_results = [child, child]
       Child.should_receive(:search).with(search).and_return(fake_results)
       get(:search, :format => 'html', :query => 'the child name')
       assigns[:results].should == fake_results
@@ -237,10 +248,10 @@ describe ChildrenController do
       stub_out_user
       Clock.stub!(:now).and_return(Time.parse("Jan 01 2000 20:15").utc)
       
-			children = [:fake_child_one, :fake_child_two]
+      children = [:fake_child_one, :fake_child_two]
       Child.stub(:get).and_return(:fake_child_one, :fake_child_two)
       
-			inject_export_generator( mock_export_generator = mock(ExportGenerator), children )
+      inject_export_generator( mock_export_generator = mock(ExportGenerator), children )
 
 
       mock_export_generator.
@@ -248,16 +259,16 @@ describe ChildrenController do
         and_return('')
 
       post(
-        :export_data,
-        {
-          :selections => 
-          {
-            '0' => 'child_1',
-            '1' => 'child_2'
-          },
-          :commit => "Export to PDF"
-        }
-      )
+           :export_data,
+           {
+             :selections =>
+             {
+               '0' => 'child_1',
+               '1' => 'child_2'
+             },
+             :commit => "Export to PDF"
+           }
+           )
     end
 
     it "asks the pdf generator to render each child as a Photo Wall" do
@@ -273,21 +284,66 @@ describe ChildrenController do
         and_return('')
 
       post(
-        :export_data,
-        {
-          :selections => 
-          {
-            '0' => 'child_1',
-            '1' => 'child_2'
-          },
-          :commit => "Export to Photo Wall"
-        }
-      )
+           :export_data,
+           {
+             :selections =>
+             {
+               '0' => 'child_1',
+               '1' => 'child_2'
+             },
+             :commit => "Export to Photo Wall"
+           }
+           )
+    end
+
+    context "permission levels" do
+      before do
+        @user = mock(:user)
+        @user.stub!(:user_name).and_return("mocked_user")
+        User.stub!(:find_by_user_name).and_return @user
+
+        limited_user = mock(:user)
+        limited_user.stub!(:permission_level).and_return(PermissionLevel::LIMITED)
+        limited_user.stub!(:user_name).and_return("limited_user")
+
+        search = mock("search", :query => 'foo', :valid? => true)
+        Search.stub!(:new).and_return(search)
+
+        @child1 = mock(:child)
+        @child1.stub!(:created_by).and_return("mocked_user")
+        @child1.stub!(:name).and_return("Foo Bar")
+        @child2 = mock(:child)
+        @child2.stub!(:created_by).and_return("limited_user")
+        @child2.stub!(:name).and_return("Foo Zoo")
+        @child3 = mock(:child)
+        @child3.stub!(:created_by).and_return("mocked_user")
+        @child3.stub!(:name).and_return("Foo Doo")
+
+        fake_results = [@child1, @child2, @child3]
+        Child.should_receive(:search).with(search).and_return(fake_results)
+      end
+
+      describe "limited user" do
+        it "should show only children added by them for a limited user" do
+          @user.stub!(:permission_level).and_return PermissionLevel::LIMITED
+          get(:search, :format => 'html', :query => 'foo')
+          assigns[:results].should == [@child1, @child3]
+        end
+      end
+
+      describe "unlimited user" do
+        it "should show children added by all users" do
+          @user.stub!(:permission_level).and_return PermissionLevel::UNLIMITED
+          get(:search, :format => 'html', :query => 'foo')
+          assigns[:results].should == [@child1, @child2, @child3]
+        end
+      end
     end
 
     describe "with no results" do
       before do
         Summary.stub!(:basic_search).and_return([])
+        stub_out_user
         get(:search,  :query => 'blah'  )
       end
 
@@ -298,25 +354,30 @@ describe ChildrenController do
       it 'asks view to display a "No results found" message if there are no results' do
         assigns[:results].size.should == 0
       end
-
     end
 
     it 'sends csv data with the correct attributes' do
-			
-			Child.stub!(:search).and_return(:child_search_results)	
-			export_generator = stub(ExportGenerator)
-			inject_export_generator(export_generator, :child_search_results)
+      user = mock(:user)
+      user.stub!(:permission_level).and_return(PermissionLevel::UNLIMITED)
+      user.stub!(:user_name).and_return("user")
+      User.stub!(:find_by_user_name).and_return(user)
+      child = mock(:child)
+      child.stub!(:created_by).and_return("user")
 
-			export_generator.should_receive(:to_csv).and_return(ExportGenerator::Export.new(:csv_data, {:foo=>:bar}))
-			@controller.
+      Child.stub!(:search).and_return([child])
+      export_generator = stub(ExportGenerator)
+      inject_export_generator(export_generator, [child])
+
+      export_generator.should_receive(:to_csv).and_return(ExportGenerator::Export.new(:csv_data, {:foo=>:bar}))
+      @controller.
         should_receive(:send_data).
         with( :csv_data, {:foo=>:bar} )
       
-			get( :search, :format => 'csv', :query => 'blah')
+      get( :search, :format => 'csv', :query => 'blah')
     end
-	end
-  describe "GET photo_pdf" do
+  end
 
+  describe "GET photo_pdf" do
     it 'extracts multiple selected ids from post params in correct order' do
       stub_out_export_generator
       Child.should_receive(:get).with('child_zero').ordered
@@ -324,21 +385,21 @@ describe ChildrenController do
       Child.should_receive(:get).with('child_two').ordered
 
       post(
-        :export_data,
-        :selections => 
-        {
-          '2' => 'child_two',
-          '0' => 'child_zero',
-          '1' => 'child_one'
-        }
-      )
+           :export_data,
+           :selections =>
+           {
+             '2' => 'child_two',
+             '0' => 'child_zero',
+             '1' => 'child_one'
+           }
+           )
     end
 
     it "sends a response containing the pdf data, the correct content_type and file name, etc" do
       stub_out_user
       Clock.stub!(:now).and_return(Time.utc(2000, 1, 1, 20, 15))
       
-			stubbed_child = stub_out_child_get
+      stubbed_child = stub_out_child_get
       stub_export_generator = stub_out_export_generator [stubbed_child] #this is getting a bit farcical now
       stub_export_generator.stub!(:to_photowall_pdf).and_return(:fake_pdf_data)
 
@@ -358,12 +419,12 @@ describe ChildrenController do
       user = mock(:user)
       user.stub!(:time_zone).and_return TZInfo::Timezone.get("US/Samoa")
       User.stub!(:find_by_user_name).and_return user
+
       Clock.stub!(:now).and_return(Time.utc(2000, 1, 1, 20, 15))
     end
     
     it "should return the photo wall pdf for selected child" do
-      Child.should_receive(:get).with('1').and_return(
-        stub_child = stub('child', :unique_identifier => '1'))
+      Child.should_receive(:get).with('1').and_return(stub_child = stub('child', :unique_identifier => '1'))
 
       ExportGenerator.should_receive(:new).and_return(export_generator = mock('export_generator'))
       export_generator.should_receive(:to_photowall_pdf).and_return(:fake_pdf_data)
